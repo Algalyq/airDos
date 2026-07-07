@@ -43,7 +43,7 @@ async def parse_document_endpoint(
         )
 
     storage_key = upload_file(
-        file_bytes=file_bytes,
+        file_data=file_bytes,
         content_type=file.content_type or "application/octet-stream",
         user_id=current_user.id,
         extension=extension,
