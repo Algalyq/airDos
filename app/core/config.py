@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str | None = None
 
     MINIO_ENDPOINT: str = "airdos-minio:9000"
+    MINIO_EXTERNAL_ENDPOINT: str | None = None
+    MINIO_EXTERNAL_SECURE: bool | None = None
     MINIO_ROOT_USER: str = "airdos_minio"
     MINIO_ROOT_PASSWORD: str = "airdos_minio_secret"
     MINIO_BUCKET: str = "airdos-documents"

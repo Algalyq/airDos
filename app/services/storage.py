@@ -10,12 +10,18 @@ from app.core.config import get_settings
 settings = get_settings()
 
 
-def get_minio_client() -> Minio:
+def get_minio_client(external: bool = False) -> Minio:
+    endpoint = settings.MINIO_ENDPOINT
+    secure = settings.MINIO_SECURE
+    if external and settings.MINIO_EXTERNAL_ENDPOINT:
+        endpoint = settings.MINIO_EXTERNAL_ENDPOINT
+        if settings.MINIO_EXTERNAL_SECURE is not None:
+            secure = settings.MINIO_EXTERNAL_SECURE
     return Minio(
-        settings.MINIO_ENDPOINT,
+        endpoint,
         access_key=settings.MINIO_ROOT_USER,
         secret_key=settings.MINIO_ROOT_PASSWORD,
-        secure=settings.MINIO_SECURE,
+        secure=secure,
         region=settings.MINIO_REGION,
     )
 
@@ -57,7 +63,8 @@ def get_presigned_url(
     client = get_minio_client()
     ensure_bucket_exists(client, bucket)
 
-    return client.presigned_get_object(
+    external_client = get_minio_client(external=True)
+    return external_client.presigned_get_object(
         bucket,
         storage_key,
         expires=timedelta(seconds=expiry_seconds),
