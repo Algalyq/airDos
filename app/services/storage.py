@@ -1,5 +1,6 @@
 import io
 import uuid
+from datetime import timedelta
 
 from minio import Minio
 from minio.error import S3Error
@@ -59,5 +60,5 @@ def get_presigned_url(
     return client.presigned_get_object(
         bucket,
         storage_key,
-        expires=expiry_seconds,
+        expires=timedelta(seconds=expiry_seconds),
     )
