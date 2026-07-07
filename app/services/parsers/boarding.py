@@ -53,16 +53,21 @@ class BoardingPassParser(BaseParser):
         return value if value else None
 
     def _extract_airline(self, text: str) -> str | None:
-        match = re.search(r"(?:Авиакомпания|Airline|airline)\s*[:\-/\s.]*([A-Za-z]+)", text, re.IGNORECASE)
+        upper = text.upper()
+        if "SCAT" in upper or "СКАТ" in upper:
+            return "SCAT"
+        if "FLYARYSTAN" in upper or "ЭЙР АСТАНА" in upper or "AIR ASTANA" in upper:
+            return "FlyArystan"
+        if "QAZAQ AIR" in upper or "QAZAQAIR" in upper:
+            return "Qazaq Air"
+        if "BEEBARJET" in upper or "BEE BARJET" in upper:
+            return "BeeBarjet"
+
+        match = re.search(r"(?:Авиакомпания|Airline|airline)\s*[:\-/\s.]+([A-Za-z]{2,})", text, re.IGNORECASE)
         if match:
             value = match.group(1).strip().upper()
-            if value in {"SCAT", "AIRLINE", "АВИАКОМПАНИЯ"}:
-                return "SCAT"
-            return value
-        if "SCAT" in text.upper() or "СКАТ" in text.upper():
-            return "SCAT"
-        if "FLYARYSTAN" in text.upper() or "ЭЙР АСТАНА" in text.upper() or "AIR ASTANA" in text.upper():
-            return "FlyArystan"
+            if value != "AIRLINE":
+                return value
 
         flight = self._extract_flight(text)
         if flight:
@@ -89,7 +94,11 @@ class BoardingPassParser(BaseParser):
         return None
 
     def _extract_identity_document(self, text: str) -> str | None:
-        match = re.search(r"(?:Документ\s*удостоверяющий\s*личность|Identity\s*document)\s*[:\-/\s]*([0-9]+)", text, re.IGNORECASE)
+        match = re.search(
+            r"(?:Документ\s*удостоверя[ющийш]+\s*личность|Identity\s*document)\s*[:\-/\s]*([0-9]+)",
+            text,
+            re.IGNORECASE,
+        )
         if match:
             return match.group(1).strip()
         match = re.search(
@@ -114,15 +123,19 @@ class BoardingPassParser(BaseParser):
 
     def _extract_booking_reference(self, text: str) -> str | None:
         patterns = [
-            r"(?:Номер\s*заказа|Номер\s*брони|Booking\s*Reference|PNR|Order)\s*[:\-/\s]*([A-Z]{6})",
             r"(?:Aviata\.kz|avia\.kz|bilet\.kz)\s+([A-Z]{6})",
-            r"([A-Z]{6})\s+\d{13}",
+            r"(?:[HН][oо][МM][eе][pр]\s*брони|брони|Номер\s*брони|Booking\s*Reference|PNR|Order)\s*[:\-/\s]*([A-Z]{6})",
             r"([A-Z]{6})\s+\d{13}\s*\n\s*номер\s*брони",
+            r"([A-Z]{6})\s+\d{13}",
+            r"(?:Номер\s*заказа|Order)\s*[:\-/\s]*([A-Z]{6})(?![A-Z])",
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
             if match:
-                return match.group(1).strip().upper()
+                value = match.group(1).strip().upper()
+                if value == "FREEDO":
+                    continue
+                return value
         return None
 
     def _extract_departure_time(self, text: str) -> str | None:
@@ -134,15 +147,37 @@ class BoardingPassParser(BaseParser):
         return codes[1] if len(codes) > 1 else None
 
     def _extract_flight_date(self, text: str) -> str | None:
-        match = re.search(r"(\d{1,2}\.[0-9]{2}\.\d{4})", text, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
-        match = re.search(r"(\d{1,2}\s+[а-яё]+\s+\d{4})", text, re.IGNORECASE)
-        return match.group(1).strip() if match else None
+        non_flight_keywords = [
+            "рождения", "birth", "дата рождения", "свидетельство", "ндс", "регистрация",
+            "бин", "выдан", "issued", "постановке", "учёт", "tax", "vat", "серия", "выписки",
+        ]
+
+        flight_date_patterns = [
+            r"(?:Рейс|Flight|рейс|Вылет|Departure|Прилет|Arrival|Дата\s*вылета|Дата).*?(\d{1,2}\.[0-9]{2}\.\d{4})",
+            r"(?:Рейс|Flight|рейс|Вылет|Departure|Прилет|Arrival|Дата\s*вылета|Дата).*?(\d{1,2}\s+[а-яё]+\s+\d{4})",
+        ]
+        for pattern in flight_date_patterns:
+            matches = list(re.finditer(pattern, text, re.IGNORECASE | re.DOTALL))
+            for m in matches:
+                pos = m.start(1)
+                nearby = text[max(0, pos - 100):pos + 50].lower()
+                if any(word in nearby for word in non_flight_keywords):
+                    continue
+                return m.group(1).strip()
+
+        for pattern in [r"(\d{1,2}\.[0-9]{2}\.\d{4})", r"(\d{1,2}\s+[а-яё]+\s+\d{4})"]:
+            for m in re.finditer(pattern, text, re.IGNORECASE):
+                pos = m.start()
+                nearby = text[max(0, pos - 100):pos + 50].lower()
+                if any(word in nearby for word in non_flight_keywords):
+                    continue
+                return m.group(1).strip()
+
+        return None
 
     def _extract_class(self, text: str) -> str | None:
         lower = text.lower()
-        for word in ("эконом", "economy", "бизнес", "business", "первый", "first"):
+        for word in ("эконом", "economy", "бизнес", "business", "первый", "first", "low"):
             if word in lower:
                 mapping = {
                     "эконом": "Эконом",
@@ -151,16 +186,16 @@ class BoardingPassParser(BaseParser):
                     "business": "Бизнес",
                     "первый": "Первый",
                     "first": "Первый",
+                    "low": "Эконом",
                 }
                 return mapping[word]
         return None
 
     def _extract_passenger(self, text: str) -> str | None:
         patterns = [
-            r"(?:ФИО\s*пассажира|Ф\.И\.О\.?|Фамилия\s*Имя|Пассажир|Passenger|Жолаушы)\s*[:\-/\s]*([A-Z]{2,}(?:\s*[A-Z]{2,})+(?:\s+\d{2}\.\d{2}\.\d{4})?)",
-            r"(?:ФИО\s*пассажира|Ф\.И\.О\.?|Пассажир|Passenger|Жолаушы|Взрослый|Adult)\s*[:\-/\s]*([A-Z]{2,}/[A-Z]{2,})",
+            r"(?:ФИО\s*пассажира|Ф\.И\.О\.?|Фамилия\s*Имя|Пассажир|Passenger|Жолаушы)\s*[:\-/\s]*([A-Z]{2,}(?:[\s/][A-Z]{2,})+(?:\s+[A-Z])?(?:\s+\d{2}\.\d{2}\.\d{4})?)",
+            r"([A-Z]{2,}/[A-Z]{2,})\s*",
             r"([A-Z]{2,}(?:\s+[A-Z]{2,})+)\s+(?:Взрослый|Детский|Младенец|Adult|Child|Infant)",
-            r"\b([A-Z]{2,}/[A-Z]{2,})\b",
             r"(?:Покупатель|Заказчик|Buyer)\s*[:\-/\s]*([А-ЯЁA-Z][а-яёa-z]+\s*[А-ЯЁA-Z][а-яёa-z]+)",
             r"\b([A-Z]{2,}(?:\s+[A-Z]{2,})+)\s+\d{9,12}\b",
         ]
@@ -173,6 +208,10 @@ class BoardingPassParser(BaseParser):
         return None
 
     def _extract_departure(self, text: str) -> str | None:
+        route = self._extract_route(text)
+        if route:
+            return route[0]
+
         value = self._extract_iata_by_city(text, prefer_first=True)
         if value:
             return value
@@ -187,6 +226,10 @@ class BoardingPassParser(BaseParser):
         return self._first_airport(text)
 
     def _extract_arrival(self, text: str) -> str | None:
+        route = self._extract_route(text)
+        if route:
+            return route[1]
+
         value = self._extract_iata_by_city(text, prefer_first=False)
         if value:
             return value
@@ -199,6 +242,24 @@ class BoardingPassParser(BaseParser):
             if value:
                 return value.upper()
         return self._second_airport(text)
+
+    def _extract_route(self, text: str) -> tuple[str, str] | None:
+        match = re.search(r"([А-ЯЁA-Z][а-яёa-z]{2,})\s*[-—>]\s*([А-ЯЁA-Z][а-яёa-z]{2,})", text, re.IGNORECASE)
+        if not match:
+            return None
+
+        from_city = self._city_to_iata(match.group(1))
+        to_city = self._city_to_iata(match.group(2))
+        if from_city and to_city:
+            return from_city, to_city
+        return None
+
+    def _city_to_iata(self, city: str) -> str | None:
+        key = city.lower().strip()
+        for city_name, iata in CITY_TO_IATA.items():
+            if city_name in key or key in city_name:
+                return iata
+        return None
 
     def _extract_iata_by_city(self, text: str, prefer_first: bool) -> str | None:
         lower_text = text.lower()
