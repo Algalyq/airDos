@@ -1,0 +1,54 @@
+services:
+  airdos-db:
+    image: postgres:15-alpine
+    container_name: airdos-db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-airdos_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airdos_password}
+      POSTGRES_DB: ${POSTGRES_DB:-airdos_db}
+    volumes:
+      - airdos_pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - airdos-network
+
+  airdos-web:
+    build: .
+    container_name: airdos-web
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      airdos-db:
+        condition: service_healthy
+    networks:
+      - airdos-network
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: airdos-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - airdos-network
+    profiles:
+      - mailhog
+
+volumes:
+  airdos_pg_data:
+
+networks:
+  airdos-network:
+    driver: bridge
