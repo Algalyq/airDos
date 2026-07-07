@@ -33,6 +33,13 @@ class Settings(BaseSettings):
 
     RESEND_API_KEY: str | None = None
 
+    MINIO_ENDPOINT: str = "airdos-minio:9000"
+    MINIO_ROOT_USER: str = "airdos_minio"
+    MINIO_ROOT_PASSWORD: str = "airdos_minio_secret"
+    MINIO_BUCKET: str = "airdos-documents"
+    MINIO_SECURE: bool = False
+    MINIO_REGION: str | None = None
+
     @property
     def async_database_url(self) -> str:
         if self.DATABASE_URL:

@@ -20,6 +20,28 @@ services:
     networks:
       - airdos-network
 
+  airdos-minio:
+    image: minio/minio:latest
+    container_name: airdos-minio
+    env_file:
+      - .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-airdos_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-airdos_minio_secret}
+    command: server /data --console-address ":9001"
+    volumes:
+      - airdos_minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - airdos-network
+
   airdos-web:
     build: .
     container_name: airdos-web
@@ -29,6 +51,8 @@ services:
       - "8000:8000"
     depends_on:
       airdos-db:
+        condition: service_healthy
+      airdos-minio:
         condition: service_healthy
     networks:
       - airdos-network
@@ -48,6 +72,7 @@ services:
 
 volumes:
   airdos_pg_data:
+  airdos_minio_data:
 
 networks:
   airdos-network:

@@ -12,7 +12,7 @@ from app.core.password import get_password_hash, verify_password
 from app.crud.user import get_user_by_email
 from app.schemas.token import TokenPayload
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 settings = get_settings()
 
